@@ -1,0 +1,33 @@
+# Virtual Environment
+.venv/
+venv/
+
+*.pyc
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment Variables
+.env
+
+# VS Code
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Model files
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+
+# Hugging Face cache
+.cache/
+
+# Logs
+*.log
