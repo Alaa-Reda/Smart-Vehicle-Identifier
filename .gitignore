@@ -31,3 +31,11 @@ __pycache__/
 
 # Logs
 *.log
+
+.venv/
+data/datasets_train/
+*.safetensors
+*.bin
+*.pt
+*.pth
+.cache/
