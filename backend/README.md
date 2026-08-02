@@ -129,6 +129,14 @@ backend/
 │   ├── prompt_builder.py
 │   └── response_generator.py
 │
+├── ranking/
+│   ├── README.md
+│   ├── intent_classifier.py
+│   ├── query_router.py
+│   ├── moderation.py
+│   ├── guardrails.py
+│   └── ranking_engine.py
+│
 └── memory/
     ├── README.md
     ├── session_memory.py
@@ -216,6 +224,26 @@ Documentation
 
 ```
 backend/rag/README.md
+```
+
+---
+
+## Ranking and Routing
+
+The ranking module decides how a user request should be handled before prompt construction.
+
+**Responsibilities**
+
+- Classify request intent (car question, comparison, general chat, off-topic).
+- Apply moderation checks for unsafe or offensive language.
+- Route the request to the best execution path (RAG, web scraping, classification, or direct VLM).
+- Apply guardrails to reduce hallucinations and enforce response policies.
+- Rank available sources by confidence and intent alignment.
+
+Documentation
+
+```
+backend/ranking/README.md
 ```
 
 ---
