@@ -1,13 +1,14 @@
 
+
 # Web Scraping & Knowledge Extraction
 
 ## Overview
 
-The `web_scraping` module is responsible for collecting, extracting, cleaning, and structuring vehicle-related information from online sources.
+The `web_scraping` module is responsible for collecting, extracting, cleaning, validating, and structuring vehicle-related information from trusted online sources.
 
-The processed data is transformed into a structured knowledge base that supports the Retrieval-Augmented Generation (RAG) system used throughout the Smart Vehicle Identifier project.
+The processed data is transformed into structured JSON documents that are stored in MongoDB and used by the Smart Vehicle Identifier backend and AI services.
 
-This module operates during the data collection phase and is independent from the runtime inference pipeline.
+This module operates independently from the AI models and is responsible only for data acquisition and processing.
 
 ---
 
@@ -18,11 +19,11 @@ Online Sources
 
 ↓
 
-Search Engine
+Google Search API
 
 ↓
 
-Google Lens
+Google Lens API
 
 ↓
 
@@ -30,11 +31,15 @@ Web Scraper
 
 ↓
 
-Content Extraction
+Parser
 
 ↓
 
-Content Cleaning
+Extractor
+
+↓
+
+Cleaner
 
 ↓
 
@@ -42,15 +47,7 @@ JSON Builder
 
 ↓
 
-Knowledge Base
-
-↓
-
-Embedding
-
-↓
-
-FAISS Database
+MongoDB
 ```
 
 ---
@@ -61,19 +58,23 @@ The Web Scraping module is responsible for:
 
 - Searching for vehicle information.
 - Collecting web content.
-- Extracting useful information.
+- Extracting useful vehicle information.
 - Cleaning raw text.
 - Parsing structured content.
 - Building JSON datasets.
-- Preparing data for the embedding pipeline.
+- Preparing structured documents for MongoDB.
+- Updating existing vehicle records.
+- Extracting pricing information.
+- Recording source URLs.
 
 The module is NOT responsible for:
 
 - AI inference.
 - Vehicle classification.
 - Question answering.
-- Database operations.
+- Database management.
 - User interaction.
+- Backend business logic.
 
 ---
 
@@ -101,7 +102,7 @@ web_scraping/
 
 ### Purpose
 
-Searches for relevant vehicle information using search engines before scraping begins.
+Searches for vehicle information using Google Search API before scraping begins.
 
 ### Responsibilities
 
@@ -115,7 +116,7 @@ Searches for relevant vehicle information using search engines before scraping b
 
 ### Purpose
 
-Uses Google Lens to identify or locate visually similar vehicles and retrieve related information sources.
+Uses Google Lens API to identify visually similar vehicles and retrieve related information sources.
 
 ### Responsibilities
 
@@ -134,9 +135,9 @@ Handles HTTP requests for downloading webpage content.
 ### Responsibilities
 
 - Send HTTP requests.
-- Handle headers.
+- Handle request headers.
 - Manage request sessions.
-- Return page content.
+- Return webpage content.
 
 ---
 
@@ -164,8 +165,8 @@ Coordinates the complete scraping workflow.
 
 - Manage scraping tasks.
 - Coordinate requests.
-- Pass pages to the parser.
-- Handle scraping flow.
+- Pass downloaded pages to the parser.
+- Handle scraping workflow.
 
 ---
 
@@ -179,7 +180,7 @@ Parses raw HTML into structured information.
 
 - Extract HTML elements.
 - Remove unnecessary markup.
-- Organize page content.
+- Organize webpage content.
 
 ---
 
@@ -191,9 +192,15 @@ Extracts meaningful vehicle information from parsed content.
 
 ### Responsibilities
 
-- Extract specifications.
-- Extract descriptions.
-- Extract technical information.
+- Extract vehicle specifications.
+- Extract vehicle descriptions.
+- Extract engine information.
+- Extract horsepower.
+- Extract transmission.
+- Extract fuel economy.
+- Extract dimensions.
+- Extract features.
+- Extract pricing information.
 - Remove irrelevant content.
 
 ---
@@ -210,6 +217,7 @@ Cleans extracted information before storage.
 - Normalize text.
 - Clean formatting.
 - Remove unnecessary whitespace.
+- Validate extracted values.
 
 ---
 
@@ -217,12 +225,13 @@ Cleans extracted information before storage.
 
 ### Purpose
 
-Converts cleaned data into structured JSON documents ready for indexing.
+Converts cleaned data into structured JSON documents ready for MongoDB storage.
 
 ### Responsibilities
 
 - Generate JSON objects.
 - Validate data.
+- Build standardized schema.
 - Export structured knowledge.
 
 ---
@@ -234,7 +243,15 @@ Vehicle Image
 
 ↓
 
-Google Lens
+Google Lens API
+
+↓
+
+Vehicle Identification
+
+↓
+
+Google Search API
 
 ↓
 
@@ -242,7 +259,7 @@ Search Results
 
 ↓
 
-Scraper
+Web Scraper
 
 ↓
 
@@ -262,7 +279,7 @@ JSON Builder
 
 ↓
 
-Knowledge Base
+MongoDB
 ```
 
 ---
@@ -271,13 +288,12 @@ Knowledge Base
 
 The Web Scraping module communicates with:
 
-- Knowledge Base Builder
-- Embedding Pipeline
+- FastAPI Backend
+- MongoDB
 
 It does not communicate directly with:
 
 - Frontend
-- Database
 - AI Models
 - Controllers
 
@@ -293,6 +309,7 @@ Every module should:
 - Avoid business logic.
 - Remain independent from AI inference.
 - Support future data sources.
+- Be reusable by other services.
 
 ---
 
@@ -302,7 +319,11 @@ Possible future enhancements include:
 
 - Multi-source scraping.
 - Automatic duplicate detection.
-- Incremental updates.
 - Scheduled data collection.
+- Incremental updates.
 - Metadata enrichment.
 - Parallel scraping.
+- Price history tracking.
+- Automatic cache refresh.
+- Source credibility scoring.
+- Multi-language scraping.

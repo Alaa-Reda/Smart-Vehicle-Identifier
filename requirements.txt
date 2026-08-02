@@ -1,9 +1,25 @@
+# Backend
 fastapi
 uvicorn
+python-dotenv
+python-multipart
+
+# Database
+pymongo
+
+# AI / Deep Learning
 torch
+torchvision
 transformers
 accelerate
 bitsandbytes>=0.46.1
 sentencepiece
+
+# Embeddings / NLP
+sentence-transformers
+
+# Image Processing
 pillow
-python-multipart
+
+# Frontend
+streamlit

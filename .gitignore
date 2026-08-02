@@ -1,41 +1,45 @@
-# Virtual Environment
+# =========================
+# Virtual Environments
+# =========================
 .venv/
 venv/
 
-*.pyc
-uploads/
-
+# =========================
 # Python
+# =========================
 __pycache__/
 *.py[cod]
 *.pyo
 
+# =========================
 # Environment Variables
+# =========================
 .env
 
+# =========================
 # VS Code
+# =========================
 .vscode/
 
+# =========================
 # Jupyter
+# =========================
 .ipynb_checkpoints/
 
-# Model files
-*.pt
-*.pth
-*.ckpt
-*.bin
-*.safetensors
+# =========================
+# Uploads
+# =========================
+uploads/
 
-# Hugging Face cache
-.cache/
-
+# =========================
 # Logs
+# =========================
 *.log
 
-.venv/
-data/datasets_train/
-*.safetensors
-*.bin
-*.pt
-*.pth
+
+
+# =========================
+# Hugging Face Cache
+# =========================
 .cache/
+

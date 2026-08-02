@@ -1,17 +1,4 @@
-
 # Car Classification Model
-
-## Overview
-
-The Car Classification Model is the primary computer vision model used by the Smart Vehicle Identifier system.
-
-Its responsibility is to analyze an input vehicle image and identify the most likely vehicle class. The classification result serves as the foundation for the remaining AI pipeline, enabling vehicle analysis, information retrieval, and intelligent question answering.
-
-This model is integrated into the backend through the centralized model loader and operates as the first stage of the vehicle analysis workflow.
-
----
-
-# Architecture Position
 
 ```
 Vehicle Image

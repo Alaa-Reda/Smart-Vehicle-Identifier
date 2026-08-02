@@ -7,7 +7,7 @@ The `mongodb` module is responsible for managing all persistent application data
 
 It provides a structured interface for storing, retrieving, updating, and deleting application data while isolating database operations from the rest of the backend.
 
-This module serves as the database implementation layer and is accessed only through the Memory module.
+This module serves as the database implementation layer and is accessed only through the Memory layer.
 
 ---
 
@@ -45,7 +45,7 @@ The MongoDB module is responsible for:
 - Deleting records.
 - Managing MongoDB collections.
 
-The MongoDB module is NOT responsible for:
+The MongoDB module is **NOT** responsible for:
 
 - Business logic.
 - AI inference.
@@ -65,7 +65,8 @@ mongodb/
 ├── session.py
 ├── vehicle.py
 ├── history.py
-└── comparison.py
+├── comparison.py
+└── vector_index.py
 ```
 
 ---
@@ -98,6 +99,7 @@ class MongoDBManager
 - Initialize the database.
 - Provide collection instances.
 - Handle connection lifecycle.
+- Perform database health checks.
 
 ---
 
@@ -127,6 +129,18 @@ Return a MongoDB collection.
 
 ---
 
+### collection_exists()
+
+Check whether a collection exists.
+
+---
+
+### health_check()
+
+Verify that MongoDB is reachable.
+
+---
+
 # session.py
 
 ## Purpose
@@ -147,16 +161,16 @@ class SessionCollection
 
 ## Responsibilities
 
-- Create session.
-- Retrieve session.
-- Update session.
-- Delete session.
+- Store sessions.
+- Retrieve sessions.
+- Update sessions.
+- Delete sessions.
 
 ---
 
 ## Public Methods
 
-### create()
+### insert()
 
 Insert a new session.
 
@@ -165,6 +179,12 @@ Insert a new session.
 ### find_by_id()
 
 Retrieve a session.
+
+---
+
+### find_all()
+
+Retrieve all sessions.
 
 ---
 
@@ -177,6 +197,12 @@ Update session data.
 ### delete()
 
 Delete a session.
+
+---
+
+### count()
+
+Return total sessions.
 
 ---
 
@@ -221,6 +247,12 @@ Retrieve vehicle.
 
 ---
 
+### find_all()
+
+Retrieve all vehicles.
+
+---
+
 ### update()
 
 Update vehicle.
@@ -230,6 +262,12 @@ Update vehicle.
 ### delete()
 
 Delete vehicle.
+
+---
+
+### count()
+
+Return total vehicles.
 
 ---
 
@@ -254,8 +292,9 @@ class HistoryCollection
 ## Responsibilities
 
 - Store chat history.
-- Retrieve conversation history.
-- Delete conversation records.
+- Retrieve chat history.
+- Update history.
+- Delete history.
 
 ---
 
@@ -263,13 +302,31 @@ class HistoryCollection
 
 ### insert()
 
-Save history record.
+Insert history record.
 
 ---
 
-### get_history()
+### find_by_id()
 
 Retrieve history.
+
+---
+
+### find_by_session()
+
+Retrieve all messages for a session.
+
+---
+
+### find_all()
+
+Retrieve all history records.
+
+---
+
+### update()
+
+Update history.
 
 ---
 
@@ -279,9 +336,15 @@ Delete history item.
 
 ---
 
-### clear()
+### delete_session_history()
 
-Delete all history.
+Delete all history for a session.
+
+---
+
+### count()
+
+Return total history records.
 
 ---
 
@@ -291,7 +354,7 @@ Delete all history.
 
 Manages the **Comparisons** collection.
 
-Stores previous vehicle comparison results.
+Stores vehicle comparison results.
 
 ---
 
@@ -305,10 +368,10 @@ class ComparisonCollection
 
 ## Responsibilities
 
-- Save comparison.
-- Retrieve comparison.
-- Delete comparison.
-- List comparisons.
+- Store comparisons.
+- Retrieve comparisons.
+- Update comparisons.
+- Delete comparisons.
 
 ---
 
@@ -316,7 +379,7 @@ class ComparisonCollection
 
 ### insert()
 
-Save comparison.
+Insert comparison.
 
 ---
 
@@ -326,15 +389,104 @@ Retrieve comparison.
 
 ---
 
-### get_all()
+### find_by_session()
 
-Retrieve comparison history.
+Retrieve session comparisons.
+
+---
+
+### find_all()
+
+Retrieve all comparisons.
+
+---
+
+### update()
+
+Update comparison.
 
 ---
 
 ### delete()
 
 Delete comparison.
+
+---
+
+### count()
+
+Return total comparisons.
+
+---
+
+# vector_index.py
+
+## Purpose
+
+Manages the **Vector Index** collection.
+
+Stores the mapping between FAISS vector IDs and vehicle documents.
+
+---
+
+## Main Class
+
+```python
+class VectorIndexCollection
+```
+
+---
+
+## Responsibilities
+
+- Store vector mappings.
+- Retrieve mappings.
+- Update mappings.
+- Delete mappings.
+
+---
+
+## Public Methods
+
+### insert()
+
+Insert a new vector mapping.
+
+---
+
+### find_by_id()
+
+Retrieve mapping by document ID.
+
+---
+
+### find_by_vector_id()
+
+Retrieve mapping using a FAISS vector ID.
+
+---
+
+### find_by_vehicle_id()
+
+Retrieve mapping using a vehicle ID.
+
+---
+
+### update()
+
+Update mapping.
+
+---
+
+### delete()
+
+Delete mapping.
+
+---
+
+### count()
+
+Return total mappings.
 
 ---
 
@@ -350,6 +502,8 @@ vehicles
 history
 
 comparisons
+
+vector_index
 ```
 
 ---
@@ -370,7 +524,7 @@ MongoDB Layer
 MongoDB
 ```
 
-Controllers, Services, and the RAG module should never access MongoDB directly.
+Controllers, Services, Retrieval, and RAG modules should never access MongoDB directly.
 
 ---
 
@@ -388,6 +542,8 @@ vehicle.py
 history.py
 
 comparison.py
+
+vector_index.py
 ```
 
 ---
@@ -404,6 +560,8 @@ VehicleCollection
 HistoryCollection
 
 ComparisonCollection
+
+VectorIndexCollection
 ```
 
 ---
@@ -415,20 +573,30 @@ connect()
 
 disconnect()
 
+get_database()
+
+get_collection()
+
+collection_exists()
+
+health_check()
+
 insert()
+
+find_by_id()
+
+find_all()
 
 update()
 
 delete()
 
-find_by_id()
-
-get_all()
+count()
 ```
 
-Method names should follow **snake_case**.
+Method names follow **snake_case**.
 
-Class names should follow **PascalCase**.
+Class names follow **PascalCase**.
 
 ---
 
@@ -442,7 +610,7 @@ Every MongoDB component must follow these rules.
 - No AI processing.
 - No HTTP communication.
 - Return Python objects only.
-- Keep database operations isolated from other backend modules.
+- Keep database operations isolated from the rest of the backend.
 
 ---
 
@@ -460,6 +628,8 @@ feedback.py
 analytics.py
 
 logs.py
+
+cache.py
 ```
 
-Each new collection should follow the same architecture and development rules.
+Each new collection should follow the same architecture and development rules.ط
