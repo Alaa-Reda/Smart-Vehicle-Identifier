@@ -1,239 +1,103 @@
-r"""
-=========================
+"""Small helpers around st.session_state so pages don't repeat key names."""
 
-Centralized session state management for the Smart Vehicle Identifier frontend.
-
-This module is the single source of truth for Streamlit session state.
-It initializes all required keys and provides helper functions for
-safe access and updates.
-
-Responsibilities
-----------------
-- Initialize session state
-- Store application state
-- Manage chat history
-- Manage vehicles mentioned during chat
-- Manage current analysis
-- Track navigation
-- Reset session sections
-- Provide typed helper functions
-
-Author
-------
-Smart Vehicle Identifier Team
-"""
-
-from __future__ import annotations
-
-from copy import deepcopy
-from typing import Any
+import uuid
 
 import streamlit as st
 
-from models.vehicle import VehicleResult
+# Keys that belong to each "concern" — used by the clear_* helpers below so
+# adding a new session key only means updating one dict, not every page.
+_CHAT_KEYS = ["conversation_id", "chat_messages"]
+_DETECTION_KEYS = ["last_detection", "pending_image", "pending_image_name", "pending_image_type"]
+_MISC_KEYS = ["selected_developer", "history_cache"]
 
 
-# ---------------------------------------------------------------------
-# Default Session Values
-# ---------------------------------------------------------------------
-
-DEFAULT_SESSION: dict[str, Any] = {
-    # Navigation
-    "current_page": "Home",
-    "previous_page": None,
-
-    # Theme
-    "theme": "dark",
-
-    # Upload
-    "uploaded_image": None,
-
-    # Analysis
-    "analysis_result": None,
-    "analysis_status": "idle",
-    "analysis_history": [],
-
-    # Chat
-    "chat_messages": [],
-    "chat_context": None,
-    "chat_vehicles": [],
-
-    # Comparison
-    "comparison_left": None,
-    "comparison_right": None,
-    "comparison_result": None,
-
-    # Dashboard
-    "dashboard_metrics": {},
-
-    # UI
-    "loading": False,
-    "notifications": [],
-
-    # Settings
-    "api_connected": False,
-    "model_ready": False,
-}
+def init_session() -> None:
+    defaults = {
+        "theme": "light",
+        "lang": "en",
+        # One id shared by chat / image / history / compare calls for this
+        # browser session — the backend has no concept of its own session,
+        # it just trusts whatever session_id it's given. Generated once and
+        # kept for as long as the tab stays open.
+        "session_id": str(uuid.uuid4()),
+        "last_detection": None,      # dict returned by api.vehicle_api.identify_vehicle
+        "pending_image": None,       # bytes waiting to be processed on the Loading page
+        "pending_image_name": None,
+        "pending_image_type": None,
+        "conversation_id": None,     # kept for backward-compat with existing pages; not sent to the backend
+        "chat_messages": [],         # list of {"role": "user"|"assistant", "content": str}
+        "selected_developer": None,  # index into DEVELOPERS, used by Developer Profile page
+        "history_cache": None,       # demo/fallback detection history list
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
-# ---------------------------------------------------------------------
-# Initialization
-# ---------------------------------------------------------------------
-
-def initialize_session() -> None:
-    """
-    Initialize every required session variable.
-
-    Safe to call multiple times.
-    """
-
-    for key, value in DEFAULT_SESSION.items():
-        st.session_state.setdefault(key, deepcopy(value))
+def get_session_id() -> str:
+    """The one id to pass to every backend call (chat_api, vehicle_api, history_api, compare_api)."""
+    return st.session_state.session_id
 
 
-# ---------------------------------------------------------------------
-# Generic Helpers
-# ---------------------------------------------------------------------
-
-def get(key: str, default: Any = None) -> Any:
-    """Return a session value."""
-
-    return st.session_state.get(key, default)
+def set_detection(result: dict) -> None:
+    st.session_state.last_detection = result
 
 
-def set(key: str, value: Any) -> None:
-    """Store a session value."""
-
-    st.session_state[key] = value
+def get_detection() -> dict | None:
+    return st.session_state.get("last_detection")
 
 
-def exists(key: str) -> bool:
-    """Check whether a session key exists."""
+def set_pending_image(image_bytes: bytes, name: str, content_type: str) -> None:
+    st.session_state.pending_image = image_bytes
+    st.session_state.pending_image_name = name
+    st.session_state.pending_image_type = content_type
 
-    return key in st.session_state
 
-
-# ---------------------------------------------------------------------
-# Chat Helpers
-# ---------------------------------------------------------------------
-
-def add_chat_message(role: str, content: str) -> None:
-    """Append a chat message."""
-
-    st.session_state["chat_messages"].append(
-        {
-            "role": role,
-            "content": content,
-        }
+def get_pending_image():
+    return (
+        st.session_state.get("pending_image"),
+        st.session_state.get("pending_image_name"),
+        st.session_state.get("pending_image_type"),
     )
 
+
+def clear_pending_image() -> None:
+    st.session_state.pending_image = None
+    st.session_state.pending_image_name = None
+    st.session_state.pending_image_type = None
+
+
+# --------------------------------------------------------------------- #
+# Cleanup helpers — use these instead of resetting keys by hand on a page.
+# Each one leaves the OTHER concerns untouched (e.g. clearing chat does not
+# wipe the last detection result). None of them reset session_id — a fresh
+# session_id means the backend loses the ability to tie history together,
+# so only rotate it on an explicit "start over completely" action.
+# --------------------------------------------------------------------- #
 
 def clear_chat() -> None:
-    """Remove all chat messages and any tracked vehicles."""
+    """Reset the local chat display only (e.g. 'New conversation' button).
 
-    st.session_state["chat_messages"] = []
-    st.session_state["chat_context"] = None
-    st.session_state["chat_vehicles"] = []
-
-
-def add_chat_vehicle(vehicle: dict[str, Any]) -> None:
+    This does NOT clear the session on the backend — call
+    chat_api.clear_chat_session(get_session_id()) too if you want that.
     """
-    Track a vehicle mentioned during the chat conversation.
-
-    Deduplicates by make + model so the same vehicle isn't
-    listed twice for PDF export.
-    """
-
-    vehicles: list[dict[str, Any]] = st.session_state.get(
-        "chat_vehicles", []
-    )
-
-    key = f"{vehicle.get('make', '')} {vehicle.get('model', '')}".strip().lower()
-
-    if not key:
-        return
-
-    already_tracked = any(
-        f"{item.get('make', '')} {item.get('model', '')}".strip().lower() == key
-        for item in vehicles
-    )
-
-    if not already_tracked:
-        vehicles.append(vehicle)
-
-    st.session_state["chat_vehicles"] = vehicles
+    st.session_state.conversation_id = None
+    st.session_state.chat_messages = []
 
 
-def get_chat_vehicles() -> list[dict[str, Any]]:
-    """Return the vehicles mentioned so far in the chat conversation."""
-
-    return st.session_state.get("chat_vehicles", [])
-
-
-# ---------------------------------------------------------------------
-# Analysis Helpers
-# ---------------------------------------------------------------------
-
-def set_analysis(result: VehicleResult) -> None:
-    """Store the latest analysis result."""
-
-    st.session_state["analysis_result"] = result
-    st.session_state["analysis_status"] = "completed"
+def clear_detection() -> None:
+    """Reset the last detection result + any pending image waiting to be processed."""
+    st.session_state.last_detection = None
+    clear_pending_image()
 
 
-def clear_analysis() -> None:
-    """Reset the current analysis."""
-
-    st.session_state["analysis_result"] = None
-    st.session_state["analysis_status"] = "idle"
-    st.session_state["uploaded_image"] = None
+def new_session() -> str:
+    """Rotate to a brand-new session_id (full 'start over', loses backend history linkage)."""
+    st.session_state.session_id = str(uuid.uuid4())
+    return st.session_state.session_id
 
 
-# ---------------------------------------------------------------------
-# Navigation
-# ---------------------------------------------------------------------
-
-def navigate(page: str) -> None:
-    """Change the active page."""
-
-    st.session_state["previous_page"] = st.session_state["current_page"]
-    st.session_state["current_page"] = page
-
-
-# ---------------------------------------------------------------------
-# Notifications
-# ---------------------------------------------------------------------
-
-def push_notification(
-    message: str,
-    level: str = "info",
-) -> None:
-    """Add a notification."""
-
-    st.session_state["notifications"].append(
-        {
-            "message": message,
-            "level": level,
-        }
-    )
-
-
-def clear_notifications() -> None:
-    """Remove all notifications."""
-
-    st.session_state["notifications"].clear()
-
-
-# ---------------------------------------------------------------------
-# Full Reset
-# ---------------------------------------------------------------------
-
-def reset_application() -> None:
-    """
-    Reset the frontend state.
-
-    Useful for "New Analysis" actions.
-    """
-
-    st.session_state.clear()
-    initialize_session()
+def clear_all_session() -> None:
+    """Full reset of every temporary/local value (keeps theme + lang + session_id)."""
+    for key in _CHAT_KEYS + _DETECTION_KEYS + _MISC_KEYS:
+        st.session_state[key] = [] if key == "chat_messages" else None

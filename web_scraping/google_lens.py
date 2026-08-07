@@ -19,11 +19,18 @@ import base64
 import io
 import logging
 import os
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Optional, Union
 
-import requests
+# Fix: web_scraping/requests.py shadows the real `requests` library.
+_ws_dir = str(Path(__file__).resolve().parent)
+_orig_path = sys.path[:]
+sys.path = [p for p in sys.path if p != _ws_dir]
+import requests as requests  # noqa — real pip requests
+sys.path = _orig_path
+
 from dotenv import load_dotenv
 from PIL import Image
 

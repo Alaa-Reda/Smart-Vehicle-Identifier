@@ -1,152 +1,89 @@
-r"""
-===========================================================
-Smart Vehicle Identifier
-Chat API
-===========================================================
+"""
+AI chat endpoints (RAG assistant).
 
-High-level API wrapper for the Vision-Language assistant.
+Matches controllers/chat_controller.py (prefix: /api/v1/chat):
 
-Responsibilities
-----------------
-- Ask questions about uploaded vehicles
-- Multi-turn conversations
-- Conversation reset
-- Optional streaming support
+    POST   /api/v1/chat/ask                            -> ask a question
+    POST   /api/v1/chat/disagree                       -> dispute / re-evaluate an answer
+    GET    /api/v1/chat/session/{session_id}/summary    -> conversation summary
+    DELETE /api/v1/chat/session/{session_id}            -> clear a chat session
 
-Contains no UI logic.
+IMPORTANT changes vs. the old stub:
+  * The backend has no "conversation_id" / "message" fields — it's
+    `session_id` + `question`. Generate ONE session_id per browser session
+    (see utils.session.get_session_id()) and reuse it for chat, image
+    identification, history and compare calls so the backend can tie them
+    together.
+  * There's no GET /chat/history or GET /chat/{id} route. Full message
+    history lives under /api/v1/history (see api/history_api.py), not
+    under /chat — /chat/session/{id}/summary only gives a short summary,
+    not the full message list.
 """
 
-from __future__ import annotations
-
-from io import BytesIO
-from typing import Any
-
-from PIL import Image
-
-from api.client import client
+from api.client import api_client
 
 
-class ChatAPI:
-    """Wrapper around the AI Assistant endpoints."""
+def ask_question(
+    question: str,
+    session_id: str | None = None,
+    vehicle_context: str | None = None,
+    language: str | None = None,
+) -> dict:
+    """Ask the RAG assistant a question, optionally scoped to a vehicle.
 
-    # ======================================================
-    # Chat
-    # ======================================================
-
-    def ask(
-        self,
-        question: str,
-        image: Image.Image | None = None,
-        conversation_id: str | None = None,
-    ) -> dict[str, Any]:
-        """
-        Ask the AI assistant a question.
-
-        Parameters
-        ----------
-        question:
-            User question.
-
-        image:
-            Optional uploaded image.
-
-        conversation_id:
-            Existing conversation id.
-        """
-
-        data = {
-            "question": question,
-        }
-
-        if conversation_id:
-            data["conversation_id"] = conversation_id
-
-        files = None
-
-        if image is not None:
-            with BytesIO() as buffer:
-                image.save(
-                    buffer,
-                    format="JPEG",
-                    quality=95,
-                )
-
-                buffer.seek(0)
-
-                files = {
-                    "image": (
-                        "vehicle.jpg",
-                        buffer.getvalue(),
-                        "image/jpeg",
-                    )
-                }
-
-                return client.post(
-                    "/chat",
-                    data=data,
-                    files=files,
-                )
-
-        return client.post(
-            "/chat",
-            data=data,
-            files=None,
-        )
-
-    # ======================================================
-    # Reset Conversation
-    # ======================================================
-
-    def reset(
-        self,
-        conversation_id: str,
-    ) -> dict[str, Any]:
-
-        return client.post(
-            "/chat/reset",
-            json={
-                "conversation_id": conversation_id
-            },
-        )
-
-    # ======================================================
-    # Conversation History
-    # ======================================================
-
-    def history(
-        self,
-        conversation_id: str,
-    ) -> dict[str, Any]:
-
-        return client.get(
-            f"/chat/{conversation_id}"
-        )
-
-    # ======================================================
-    # Streaming (Future)
-    # ======================================================
-
-    def stream(
-        self,
-        question: str,
-        conversation_id: str | None = None,
-    ) -> Any:
-        """
-        Placeholder for future streaming support.
-
-        Can later be upgraded to:
-            - SSE
-            - WebSocket
-            - Chunked responses
-        """
-
-        raise NotImplementedError(
-            "Streaming is not implemented yet."
-        )
+    `vehicle_context` is a free-text description (e.g. "BMW M4 Competition
+    2022"), not an id — the backend has nothing to look a detection up by.
+    """
+    payload = {"question": question}
+    if session_id:
+        payload["session_id"] = session_id
+    if vehicle_context:
+        payload["vehicle_context"] = vehicle_context
+    if language:
+        payload["language"] = language
+    return api_client.post("/api/v1/chat/ask", json=payload)
 
 
-# ==========================================================
-# Singleton
-# ==========================================================
+def handle_disagreement(
+    session_id: str,
+    original_question: str,
+    disputed_answer: str,
+    user_claim: str | None = None,
+    language: str | None = None,
+) -> dict:
+    """Send a 'that's wrong' correction so the assistant re-evaluates its answer."""
+    payload = {
+        "session_id": session_id,
+        "original_question": original_question,
+        "disputed_answer": disputed_answer,
+    }
+    if user_claim:
+        payload["user_claim"] = user_claim
+    if language:
+        payload["language"] = language
+    return api_client.post("/api/v1/chat/disagree", json=payload)
 
-chat_api = ChatAPI()
+
+def get_session_summary(session_id: str) -> dict:
+    """Short AI-generated summary of the session, not the raw message list."""
+    return api_client.get(f"/api/v1/chat/session/{session_id}/summary")
+
+
+def clear_chat_session(session_id: str) -> dict:
+    return api_client.delete(f"/api/v1/chat/session/{session_id}")
+# ----------------------------------------------------------------------
+# Backward compatibility
+# ----------------------------------------------------------------------
+
+def send_message(
+    message: str,
+    session_id: str | None = None,
+    vehicle_context: str | None = None,
+    language: str | None = None,
+):
+    return ask_question(
+        question=message,
+        session_id=session_id,
+        vehicle_context=vehicle_context,
+        language=language,
+    )

@@ -117,6 +117,46 @@ class VehicleExtractor:
         return self._from_tables(field) or self._match(field)
 
     # ----------------------------------------------------------
+    # Relevance Gate
+    # ----------------------------------------------------------
+
+    def is_relevant(self, make: str, model: str, year: Optional[str] = None) -> bool:
+        """
+        Verify the scraped page is actually about the requested vehicle
+        before any of its fields are trusted as candidate spec values.
+
+        A Selenium timeout, a redirect to a "latest review" page, or a
+        stale search result can all return HTML that renders fine but
+        describes a completely different vehicle (e.g. a review page
+        for one car serving content about another after a bad match).
+        Without this check, extract() would happily pull specs from
+        that unrelated page and merge_pages() would treat them as a
+        legitimate candidate for the target vehicle.
+
+        Requires: the make token appears, AND at least one token from
+        the model appears, somewhere in the page text. Year is checked
+        if provided but not required alone (many spec pages omit the
+        model year in body text even when the trim/year is in the URL
+        or title).
+        """
+        if not make:
+            return True  # nothing to check against (e.g. brand overview)
+
+        text_lower = self._text.lower()
+        title_lower = (self._parsed.get("title") or "").lower()
+        haystack = f"{title_lower} {text_lower}"
+
+        if make.lower() not in haystack:
+            return False
+
+        if model:
+            model_tokens = [t for t in re.split(r"\s+", model.lower()) if len(t) > 2]
+            if model_tokens and not any(tok in haystack for tok in model_tokens):
+                return False
+
+        return True
+
+    # ----------------------------------------------------------
     # Spec Extractors
     # ----------------------------------------------------------
 

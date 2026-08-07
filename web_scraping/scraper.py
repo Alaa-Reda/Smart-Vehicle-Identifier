@@ -64,18 +64,60 @@ class VehicleScraper:
                 html = browser.get_page(url, scroll=True)
         return html
 
-    def _process_url(self, url: str) -> Optional[dict[str, Any]]:
-        html = self._fetch(url)
+    def _process_url(
+        self,
+        url: str,
+        make: str = "",
+        model: str = "",
+        year: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        # Each URL is isolated: a flaky site (connection reset, a crashed
+        # Selenium/driver session, an unexpected page structure, etc.)
+        # must only cost us that ONE source, not the whole batch. Before
+        # this, an unhandled exception from _fetch()/parsing on a single
+        # URL propagated all the way up through _process_urls() and
+        # scrape_by_name(), throwing away every page that had already been
+        # scraped successfully in the same run.
+        try:
+            html = self._fetch(url)
+        except Exception as exc:
+            logger.warning("Failed to fetch %s — skipping this source: %s", url, exc)
+            return None
+
         if not html:
             return None
-        parsed    = HTMLParser(html, url=url).parse()
-        extracted = VehicleExtractor(parsed).extract()
-        cleaned   = self._cleaner.clean(extracted)
+
+        try:
+            parsed    = HTMLParser(html, url=url).parse()
+            extractor = VehicleExtractor(parsed)
+
+            # Reject pages that loaded/rendered fine but aren't actually
+            # about the requested vehicle (bad Selenium fallback content,
+            # redirect to an unrelated "latest review", stale search hit,
+            # etc.) BEFORE trusting any of their extracted fields as
+            # candidate values for this vehicle.
+            if not extractor.is_relevant(make, model, year):
+                logger.warning(
+                    "Skipping %s — page content does not appear to be "
+                    "about %s %s %s (relevance check failed).",
+                    url, year or "", make, model,
+                )
+                return None
+
+            extracted = extractor.extract()
+            cleaned   = self._cleaner.clean(extracted)
+        except Exception as exc:
+            logger.warning("Failed to parse/extract %s — skipping this source: %s", url, exc)
+            return None
+
         return cleaned if cleaned else None
 
     def _process_urls(
         self,
         urls: list[str],
+        make: str = "",
+        model: str = "",
+        year: Optional[str] = None,
     ) -> tuple[dict[str, Any], list[str]]:
         pages:   list[dict[str, Any]] = []
         sources: list[str]            = []
@@ -86,7 +128,7 @@ class VehicleScraper:
         ]
 
         for url in filtered[:self.max_pages]:
-            result = self._process_url(url)
+            result = self._process_url(url, make=make, model=model, year=year)
             if result:
                 pages.append(result)
                 sources.append(url)
@@ -111,7 +153,7 @@ class VehicleScraper:
         if not urls:
             return None
 
-        merged, sources = self._process_urls(urls)
+        merged, sources = self._process_urls(urls, make=make, model=model, year=year)
         if not merged:
             return None
 
@@ -151,7 +193,12 @@ class VehicleScraper:
         ) if make else []
 
         all_urls = list(dict.fromkeys(search_urls + lens_urls))
-        merged, sources = self._process_urls(all_urls)
+        merged, sources = self._process_urls(
+            all_urls,
+            make=make or "",
+            model=model or title or "",
+            year=year,
+        )
         if not merged:
             return None
 
@@ -221,7 +268,7 @@ class VehicleScraper:
             logger.warning("No URLs found for brand: %s", make)
             return None
 
-        merged, sources = self._process_urls(urls)
+        merged, sources = self._process_urls(urls, make=make, model="", year=year)
 
         if not merged:
             return None

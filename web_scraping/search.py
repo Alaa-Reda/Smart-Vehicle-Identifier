@@ -11,12 +11,22 @@ Supports two modes:
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any, Optional
 
-import requests
+# Fix: web_scraping/requests.py shadows the real `requests` library.
+# Import the real library by temporarily hiding the local file from sys.path.
+_ws_dir = str(Path(__file__).resolve().parent)
+_cleaned = [p for p in sys.path if p != _ws_dir]
+_orig_path = sys.path[:]
+sys.path = _cleaned
+import requests as requests  # noqa: E402  — real pip requests
+sys.path = _orig_path        # restore
+
 from dotenv import load_dotenv
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -44,11 +54,52 @@ PREFERRED_DOMAINS = [
     "wikipedia.org",
 ]
 
+# Domains trusted specifically for pricing data
+PRICE_DOMAINS = [
+    "kbb.com",           # Kelley Blue Book — market average
+    "edmunds.com",       # True Market Value
+    "autotrader.com",    # dealer listings
+    "cars.com",          # dealer + private listings
+    "caranddriver.com",  # MSRP
+    "motortrend.com",    # MSRP + pricing
+    "cargurus.com",      # market analysis
+    "truecar.com",       # dealer pricing
+    "carmax.com",        # used pricing
+]
+
 BLOCKED_DOMAINS = {
     "facebook.com", "instagram.com", "tiktok.com", "youtube.com",
     "twitter.com", "pinterest.com", "reddit.com", "tumblr.com",
     "snapchat.com", "yelp.com", "tripadvisor.com",
 }
+
+# Wikipedia's vehicle articles cover an entire nameplate's full production
+# run (often 10-20 years, every trim and engine option) in one flattened
+# infobox. For a TRIM-SPECIFIC spec search (make+model+year all given),
+# treating its infobox as one equally-weighted candidate against a
+# dedicated trim review causes exactly the kind of field-level conflicts
+# (engine, horsepower, fuel_type, drive all wrong) that merge_pages() has
+# to vote on. Excluded from PREFERRED_DOMAINS lookups used for trim-level
+# spec queries; still fine for search_brand_overview(), where a lineup
+# summary is actually what's wanted.
+TRIM_SPEC_EXCLUDED_DOMAINS = {"wikipedia.org"}
+
+
+def preferred_domain_rank(url: str) -> int:
+    """
+    Rank a source URL by trust for spec data — lower is more trusted.
+
+    Used by json_builder.merge_pages() to break ties deterministically
+    when multiple scraped pages disagree on a field's value and no
+    single value has a clear majority. Without this, Python's
+    Counter.most_common() breaks ties by insertion order, which
+    silently depends on whichever page happened to be scraped first —
+    not on which source is actually more reliable.
+    """
+    for i, domain in enumerate(PREFERRED_DOMAINS):
+        if domain in url:
+            return i
+    return len(PREFERRED_DOMAINS)
 
 
 class VehicleSearchClient:
@@ -148,14 +199,18 @@ class VehicleSearchClient:
         query   = self.build_query(make, model, year, focus="specs")
         results = self.search(query, num_results=num_results * 2)
 
-        def priority(r: dict) -> int:
-            link = r["link"]
-            for i, domain in enumerate(PREFERRED_DOMAINS):
-                if domain in link:
-                    return i
-            return len(PREFERRED_DOMAINS)
+        # This is a trim-specific query (real model given, not a brand
+        # overview) — drop multi-decade nameplate sources like Wikipedia
+        # that flatten every trim/year into one infobox and are prone to
+        # yielding wrong values for a single specific trim/year.
+        is_trim_specific = bool(model and model.strip().lower() not in ("", "unknown"))
+        if is_trim_specific:
+            results = [
+                r for r in results
+                if not any(d in r["link"] for d in TRIM_SPEC_EXCLUDED_DOMAINS)
+            ]
 
-        results.sort(key=priority)
+        results.sort(key=lambda r: preferred_domain_rank(r["link"]))
         urls = [r["link"] for r in results if r["link"]][:num_results]
 
         logger.info(
@@ -163,6 +218,73 @@ class VehicleSearchClient:
             len(urls), year or "", make, model,
         )
         return urls
+
+    # ----------------------------------------------------------
+    # Search Vehicle Price — returns URLs + price snippets
+    # ----------------------------------------------------------
+
+    def search_vehicle_price(
+        self,
+        make: str,
+        model: str,
+        year: Optional[str] = None,
+        num_results: int = 6,
+    ) -> list[dict[str, Any]]:
+        """
+        Search specifically for current vehicle pricing data.
+
+        Returns a list of dicts with:
+            - link: str
+            - title: str
+            - snippet: str   (may contain price info)
+            - domain: str
+            - is_price_domain: bool
+
+        Results are sorted: trusted price domains first.
+        """
+        base = f"{year} {make} {model}".strip() if year else f"{make} {model}".strip()
+
+        queries = [
+            f"{base} price MSRP",
+            f"{base} used price",
+            f"{base} average market price",
+        ]
+
+        seen_links: set[str] = set()
+        results: list[dict[str, Any]] = []
+
+        for query in queries:
+            for item in self.search(query, num_results=4):
+                link = item.get("link", "")
+                if not link or link in seen_links:
+                    continue
+                if any(d in link for d in BLOCKED_DOMAINS):
+                    continue
+                seen_links.add(link)
+                domain = link.split("/")[2] if "//" in link else link
+                results.append({
+                    "link":            link,
+                    "title":           item.get("title", ""),
+                    "snippet":         item.get("snippet", ""),
+                    "domain":          domain,
+                    "is_price_domain": any(pd in domain for pd in PRICE_DOMAINS),
+                })
+
+        # Sort: price-trusted domains first, then by PRICE_DOMAINS order
+        def _rank(r: dict) -> int:
+            domain = r["domain"]
+            for i, pd in enumerate(PRICE_DOMAINS):
+                if pd in domain:
+                    return i
+            return len(PRICE_DOMAINS)
+
+        results.sort(key=_rank)
+        logger.info(
+            "Price search for '%s %s %s' → %d results (%d from price domains).",
+            year or "", make, model, len(results),
+            sum(1 for r in results if r["is_price_domain"]),
+        )
+        return results[:num_results]
 
     # ----------------------------------------------------------
     # Search Brand Overview (make only — no model/year)
@@ -209,15 +331,9 @@ class VehicleSearchClient:
                     seen_links.add(link)
                     all_results.append(r)
 
-        # Sort by preferred domains
-        def priority(r: dict) -> int:
-            link = r["link"]
-            for i, domain in enumerate(PREFERRED_DOMAINS):
-                if domain in link:
-                    return i
-            return len(PREFERRED_DOMAINS)
-
-        all_results.sort(key=priority)
+        # Sort by preferred domains (Wikipedia is fine here — a lineup
+        # overview across trims/years is exactly what it's good at).
+        all_results.sort(key=lambda r: preferred_domain_rank(r["link"]))
         urls = [r["link"] for r in all_results][:num_results]
 
         logger.info(

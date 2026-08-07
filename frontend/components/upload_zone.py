@@ -1,203 +1,55 @@
+"""Styled drag-and-drop upload zone.
+
+st.file_uploader() renders as a real, independent widget (its own
+element-container), so it can't be nested inside a hand-written <div> the
+way a single mockup box suggests — see the long comment at the top of
+components/navigation.py for why that never actually nests in Streamlit.
+
+Instead we render two adjacent pieces and style them from the outside so
+they *read* as one seamless box:
+  1. `.vv-upload-zone-top` — our own markup: icon, title, subtitle.
+  2. the real file_uploader dropzone right below it, restyled via the
+     `.vv-upload-zone-marker` + adjacent-sibling CSS trick (same pattern
+     the navbar uses in components/navigation.py) so its border continues
+     the one above it and Streamlit's own "Drag and drop file here" copy
+     is hidden (we already say that above) in favor of a real "Browse
+     Files" button styled to match.
 """
-===========================================================
-Smart Vehicle Identifier
-Component: Upload Zone
-===========================================================
-
-Professional image upload component.
-
-Features
---------
-✓ Drag & Drop
-✓ File Validation
-✓ Image Preview
-✓ Remove Image
-✓ Session Integration
-✓ Reusable API
-"""
-
-from __future__ import annotations
-
-from dataclasses import dataclass
-from io import BytesIO
 
 import streamlit as st
-from PIL import Image
-
-from utils.session import get, set
+from utils.i18n import t
 
 
-# ==========================================================
-# Configuration
-# ==========================================================
-
-SUPPORTED_FORMATS = ("png", "jpg", "jpeg", "webp")
-
-MAX_IMAGE_SIZE_MB = 10
-
-
-# ==========================================================
-# Data Model
-# ==========================================================
-
-@dataclass(frozen=True, slots=True)
-class UploadedVehicleImage:
-    """Uploaded vehicle image."""
-
-    image: Image.Image
-    filename: str
-    file_size: int
-    width: int
-    height: int
-    format: str
-
-
-# ==========================================================
-# Validation
-# ==========================================================
-
-def _validate(uploaded_file) -> str | None:
-    """Validate uploaded image."""
-
-    if uploaded_file is None:
-        return None
-
-    size_mb = uploaded_file.size / (1024 * 1024)
-
-    if size_mb > MAX_IMAGE_SIZE_MB:
-        return (
-            f"Image exceeds maximum size "
-            f"({MAX_IMAGE_SIZE_MB} MB)."
-        )
-
-    return None
-
-
-# ==========================================================
-# Convert
-# ==========================================================
-
-def _to_model(uploaded_file) -> UploadedVehicleImage:
-    """Convert Streamlit upload to UploadedVehicleImage."""
-
-    pil_image = Image.open(uploaded_file)
-
-    image_format = pil_image.format or "Unknown"
-
-    image = pil_image.convert("RGB")
-
-    width, height = image.size
-
-    return UploadedVehicleImage(
-        image=image,
-        filename=uploaded_file.name,
-        file_size=uploaded_file.size,
-        width=width,
-        height=height,
-        format=image_format,
+def render_upload_zone():
+    st.markdown(
+        f"""
+        <div class="vv-upload-zone-top">
+            <div class="vv-upload-icon">⬆️</div>
+            <p class="vv-upload-title">{t('upload_title')}</p>
+            <p class="vv-text-secondary vv-upload-subtitle">{t('upload_subtitle')}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-
-# ==========================================================
-# Preview
-# ==========================================================
-
-def _preview(data: UploadedVehicleImage) -> None:
-    """Render image preview."""
-
-    st.image(
-        data.image,
-        use_container_width=True,
-    )
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric("Width", data.width)
-    c2.metric("Height", data.height)
-    c3.metric(
-        "Size",
-        f"{data.file_size / 1024:.1f} KB",
-    )
-
-
-# ==========================================================
-# Public Render
-# ==========================================================
-
-def render() -> UploadedVehicleImage | None:
-    """
-    Render upload component.
-
-    Returns
-    -------
-    UploadedVehicleImage | None
-    """
-
+    # This marker must sit immediately before file_uploader() — nothing
+    # else in between — so the CSS sibling selector targets only this
+    # uploader's dropzone (see assets/css/theme.css).
+    st.markdown('<span class="vv-upload-zone-marker"></span>', unsafe_allow_html=True)
     uploaded = st.file_uploader(
-        label="Upload Vehicle Image",
-        type=SUPPORTED_FORMATS,
-        accept_multiple_files=False,
-        help="Supported: PNG, JPG, JPEG, WEBP",
+        label="Upload vehicle image",
+        type=["jpg", "jpeg", "png", "webp"],
+        label_visibility="collapsed",
     )
 
-    if uploaded is None:
-        set("uploaded_image", None)
-        return None
+    st.markdown(
+        f"""
+        <div class="vv-upload-legend">
+            <span>⬆ <strong>{t('upload_label')}</strong> &middot; {t('upload_legend_formats')}</span>
+            <span>{t('upload_legend_max_size')}</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    error = _validate(uploaded)
-
-    if error:
-        st.error(error)
-        return None
-
-    image_data = _to_model(uploaded)
-
-    set("uploaded_image", image_data)
-
-    _preview(image_data)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        if st.button(
-            "🗑 Remove",
-            use_container_width=True,
-            key="remove_uploaded_image",
-        ):
-            set("uploaded_image", None)
-            st.rerun()
-
-    with col2:
-        st.success("Image Ready")
-
-    return image_data
-
-
-# ==========================================================
-# Helpers
-# ==========================================================
-
-def current() -> UploadedVehicleImage | None:
-    """Return the current uploaded image."""
-
-    return get("uploaded_image")
-
-
-def has_image() -> bool:
-    """Check whether an image is currently available."""
-
-    return current() is not None
-
-
-def image_bytes() -> bytes | None:
-    """Return the uploaded image as JPEG bytes."""
-
-    img = current()
-
-    if img is None:
-        return None
-
-    with BytesIO() as buffer:
-        img.image.save(buffer, format="JPEG")
-        return buffer.getvalue()
+    return uploaded

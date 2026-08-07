@@ -28,8 +28,10 @@ class VectorStore:
         if npy_fallback.exists():
             npy_fallback.unlink()
 
-    def add(self, vectors: np.ndarray) -> None:
+    def add(self, vectors: np.ndarray) -> int:
+        vector_id = self.manager.count()
         self.manager.add_vectors(vectors)
+        return vector_id
 
     def search(self, query_vector: np.ndarray, top_k: int = 5) -> tuple[np.ndarray, np.ndarray]:
         return self.manager.search(query_vector=query_vector, top_k=top_k)

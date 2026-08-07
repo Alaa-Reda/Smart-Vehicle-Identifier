@@ -1,160 +1,57 @@
 """
-=======================
+Theme utilities.
 
-Theme configuration utilities.
+Handles loading the shared CSS file and switching between light and dark
+mode by writing a `data-theme` attribute onto the real page <html> element.
 
-This module is responsible for configuring the visual identity of the
-Smart Vehicle Identifier frontend.
-
-It injects global CSS variables into the application while keeping the
-actual component styling inside external CSS files.
-
-Responsibilities
-----------------
-- Inject design tokens
-- Configure global fonts
-- Configure color variables
-- Configure spacing variables
-- Configure border radius variables
-- Prepare CSS variables for the styling layer
-
-Author
-------
-Smart Vehicle Identifier Team
+IMPORTANT: `st.markdown(..., unsafe_allow_html=True)` renders through
+`innerHTML`, and browsers never execute <script> tags inserted that way.
+So any JS that needs to actually *run* (theme attribute, RTL direction,
+navbar scroll behaviour) must go through `st.components.v1.html`, which
+renders in a real (same-origin) iframe whose scripts do execute and which
+can safely reach up to `window.parent.document`.
 """
 
-from __future__ import annotations
-
-from functools import lru_cache
-
+from pathlib import Path
 import streamlit as st
-from config.settings import settings
+import streamlit.components.v1 as components
+
+CSS_PATH = Path(__file__).resolve().parent.parent / "assets" / "css" / "theme.css"
 
 
-@lru_cache(maxsize=1)
-def _css_variables() -> str:
-    """
-    Build the global CSS variable block.
-
-    Returns
-    -------
-    str
-        CSS variables used throughout the application.
-    """
-
-    return f"""
-<style>
-
-:root {{
-
-    /* -------------------------------------------------- */
-    /* Brand Colors                                        */
-    /* -------------------------------------------------- */
-
-    --color-primary: {settings.PRIMARY_COLOR};
-    --color-secondary: {settings.SECONDARY_COLOR};
-    --color-accent: {settings.ACCENT_COLOR};
-
-    --color-success: {settings.SUCCESS_COLOR};
-    --color-warning: {settings.WARNING_COLOR};
-    --color-danger: {settings.ERROR_COLOR};
-
-    /* -------------------------------------------------- */
-    /* Backgrounds                                         */
-    /* -------------------------------------------------- */
-
-    --background: {settings.BACKGROUND};
-    --surface: {settings.SURFACE};
-    --card: {settings.CARD};
-
-    /* -------------------------------------------------- */
-    /* Typography                                          */
-    /* -------------------------------------------------- */
-
-    --text-primary: #FFFFFF;
-    --text-secondary: #D1D5DB;
-    --text-muted: #9CA3AF;
-
-    /* -------------------------------------------------- */
-    /* Radius                                              */
-    /* -------------------------------------------------- */
-
-    --radius-sm: 10px;
-    --radius-md: 16px;
-    --radius-lg: 24px;
-    --radius-xl: 32px;
-
-    /* -------------------------------------------------- */
-    /* Spacing                                             */
-    /* -------------------------------------------------- */
-
-    --space-1: 4px;
-    --space-2: 8px;
-    --space-3: 12px;
-    --space-4: 16px;
-    --space-5: 24px;
-    --space-6: 32px;
-    --space-7: 48px;
-    --space-8: 64px;
-
-    /* -------------------------------------------------- */
-    /* Shadows                                             */
-    /* -------------------------------------------------- */
-
-    --shadow-sm: 0 2px 8px rgba(0,0,0,.20);
-    --shadow-md: 0 8px 24px rgba(0,0,0,.25);
-    --shadow-lg: 0 20px 60px rgba(0,0,0,.35);
-    --shadow-glow: 0 0 30px rgba(37,99,235,.30);
-
-}}
-
-html,
-body,
-[class*="css"] {{
-    font-family:
-        "Inter",
-        "Segoe UI",
-        sans-serif;
-}}
-
-</style>
-"""
+def init_theme() -> None:
+    """Make sure `theme` exists in session_state. Call once at app start."""
+    if "theme" not in st.session_state:
+        st.session_state.theme = "light"
 
 
-@lru_cache(maxsize=1)
-def _font_import() -> str:
-    """
-    Return Google Font import.
-    """
-
-    return """
-<link rel="preconnect" href="https://fonts.googleapis.com">
-
-<link rel="preconnect"
-href="https://fonts.gstatic.com"
-crossorigin>
-
-<link href="https://fonts.googleapis.com/css2?
-family=Inter:wght@300;400;500;600;700;800&
-display=swap"
-rel="stylesheet">
-"""
+def toggle_theme() -> None:
+    st.session_state.theme = "dark" if st.session_state.theme == "light" else "light"
 
 
-def configure_theme() -> None:
-    """
-    Configure the global application theme.
+def load_css() -> None:
+    """Inject the theme CSS, then apply data-theme / dir on the real document."""
+    css = CSS_PATH.read_text(encoding="utf-8")
+    theme = st.session_state.get("theme", "light")
+    lang = st.session_state.get("lang", "en")
+    direction = "rtl" if lang == "ar" else "ltr"
 
-    This function is intentionally lightweight and may be safely called
-    multiple times.
-    """
+    st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
-    st.markdown(
-        _font_import(),
-        unsafe_allow_html=True,
-    )
-
-    st.markdown(
-        _css_variables(),
-        unsafe_allow_html=True,
+    # This tiny iframe's script is what actually executes in the browser.
+    components.html(
+        f"""
+        <script>
+            (function() {{
+                const doc = window.parent.document;
+                doc.documentElement.setAttribute('data-theme', '{theme}');
+                doc.documentElement.setAttribute('dir', '{direction}');
+                doc.documentElement.setAttribute('lang', '{lang}');
+                doc.body.setAttribute('data-theme', '{theme}');
+                doc.body.setAttribute('dir', '{direction}');
+            }})();
+        </script>
+        """,
+        height=0,
+        width=0,
     )
