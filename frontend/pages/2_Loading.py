@@ -14,7 +14,7 @@ st.set_page_config(page_title="Analyzing | Vehicle Vision AI", layout="wide", in
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("loading")
 render_navbar(active="nav_detect")
 
 st.markdown(f"## {t('loading_title')}")

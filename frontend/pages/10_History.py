@@ -26,7 +26,7 @@ st.set_page_config(
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("history")
 
 render_navbar(active="nav_history")
 

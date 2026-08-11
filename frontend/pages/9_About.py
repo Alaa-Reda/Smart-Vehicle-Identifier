@@ -11,7 +11,7 @@ st.set_page_config(page_title="About | Vehicle Vision AI", layout="wide", initia
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("about")
 render_navbar(active="nav_about")
 
 left, right = st.columns([1.2, 1], gap="large")

@@ -19,7 +19,7 @@ st.set_page_config(
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("chat")
 render_navbar(active="nav_chat")
 
 # ── Session state defaults ────────────────────────────────────────────────

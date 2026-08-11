@@ -13,7 +13,7 @@ st.set_page_config(page_title="Detect Vehicle | Vehicle Vision AI", layout="wide
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("detect")
 render_navbar(active="nav_detect")
 
 st.markdown(f"## {t('detect_title')}")

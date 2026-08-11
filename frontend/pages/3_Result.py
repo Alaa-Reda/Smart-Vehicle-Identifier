@@ -11,7 +11,7 @@ st.set_page_config(page_title="Result | Vehicle Vision AI", layout="wide", initi
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("result")
 render_navbar(active="nav_detect")
 
 st.markdown(f"## {t('result_title')}")

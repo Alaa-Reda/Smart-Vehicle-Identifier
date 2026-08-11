@@ -18,7 +18,7 @@ st.set_page_config(
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("developer_profile")
 
 render_navbar(active="nav_developers")
 

@@ -20,7 +20,7 @@ st.set_page_config(
 init_session()
 init_theme()
 init_lang()
-load_css()
+load_css("pdf_report")
 
 render_navbar(active="nav_detect")
 
